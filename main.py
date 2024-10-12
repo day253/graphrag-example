@@ -15,6 +15,8 @@ from tenacity import (
     retry_if_exception_type,
 )
 
+import argparse
+
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("nano-graphrag").setLevel(logging.INFO)
 
@@ -99,11 +101,12 @@ def query():
         best_model_func=openapi_model_if_cache,
         cheap_model_func=openapi_model_if_cache,
     )
-    print(
-        rag.query(
-            "What are the top themes in this story?", param=QueryParam(mode="global")
-        )
-    )
+    # "What are the top themes in this story?"
+    while True:
+        user_input = input("Enter your query (or type 'exit' to quit): ")
+        if user_input.lower() == "exit":
+            break
+        print(rag.query(user_input, param=QueryParam(mode="global")))
 
 
 def insert(file_path):
@@ -127,6 +130,26 @@ def insert(file_path):
     print("indexing time:", time() - start)
 
 
+def main():
+    parser = argparse.ArgumentParser(description="Run insert or query operations.")
+    parser.add_argument(
+        "operation",
+        choices=["insert", "query"],
+        help="Specify the operation to perform: 'insert' or 'query'.",
+    )
+    parser.add_argument(
+        "--file",
+        type=str,
+        help="File path for the insert operation.",
+        default="./book.txt",
+    )
+    args = parser.parse_args()
+
+    if args.operation == "insert":
+        insert(args.file)
+    elif args.operation == "query":
+        query()
+
+
 if __name__ == "__main__":
-    insert("./book.txt")
-    query()
+    main()
