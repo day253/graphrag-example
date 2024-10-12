@@ -24,6 +24,7 @@ SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 CHAT_MODEL = os.getenv("CHAT_MODEL")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
+WORKING_DIR = "./nano_graphrag_cache_deepseek_TEST"
 
 siliconflow_async_client = AsyncOpenAI(
     api_key=SILICONFLOW_API_KEY, base_url="https://api.siliconflow.cn/v1/"
@@ -90,9 +91,6 @@ def remove_if_exist(file):
         os.remove(file)
 
 
-WORKING_DIR = "./nano_graphrag_cache_deepseek_TEST"
-
-
 def query():
     rag = GraphRAG(
         working_dir=WORKING_DIR,
@@ -107,18 +105,14 @@ def query():
     )
 
 
-def insert():
+def insert(file_path):
     from time import time
-
-    with open("./book.txt", encoding="utf-8-sig") as f:
-        FAKE_TEXT = f.read()
 
     remove_if_exist(f"{WORKING_DIR}/vdb_entities.json")
     remove_if_exist(f"{WORKING_DIR}/kv_store_full_docs.json")
     remove_if_exist(f"{WORKING_DIR}/kv_store_text_chunks.json")
     remove_if_exist(f"{WORKING_DIR}/kv_store_community_reports.json")
     remove_if_exist(f"{WORKING_DIR}/graph_chunk_entity_relation.graphml")
-
     rag = GraphRAG(
         working_dir=WORKING_DIR,
         enable_llm_cache=True,
@@ -127,12 +121,11 @@ def insert():
         cheap_model_func=deepseepk_model_if_cache,
     )
     start = time()
-    rag.insert(FAKE_TEXT)
+    with open(file_path, encoding="utf-8-sig") as f:
+        rag.insert(f.read())
     print("indexing time:", time() - start)
-    # rag = GraphRAG(working_dir=WORKING_DIR, enable_llm_cache=True)
-    # rag.insert(FAKE_TEXT[half_len:])
 
 
 if __name__ == "__main__":
-    insert()
+    insert("./book.txt")
     query()
