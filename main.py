@@ -41,7 +41,7 @@ global_openai_async_client = siliconflow_async_client
     wait=wait_exponential(multiplier=1, min=4, max=10),
     retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
 )
-async def siliconflow_embedding(texts: list[str]) -> np.ndarray:
+async def openapi_embedding(texts: list[str]) -> np.ndarray:
     openai_async_client = global_openai_async_client
     response = await openai_async_client.embeddings.create(
         model=EMBEDDING_MODEL, input=texts, encoding_format="float"
@@ -49,7 +49,7 @@ async def siliconflow_embedding(texts: list[str]) -> np.ndarray:
     return np.array([dp.embedding for dp in response.data])
 
 
-async def deepseepk_model_if_cache(
+async def openapi_model_if_cache(
     prompt, system_prompt=None, history_messages=[], **kwargs
 ) -> str:
     openai_async_client = global_openai_async_client
@@ -94,9 +94,9 @@ def remove_if_exist(file):
 def query():
     rag = GraphRAG(
         working_dir=WORKING_DIR,
-        embedding_func=siliconflow_embedding,
-        best_model_func=deepseepk_model_if_cache,
-        cheap_model_func=deepseepk_model_if_cache,
+        embedding_func=openapi_embedding,
+        best_model_func=openapi_model_if_cache,
+        cheap_model_func=openapi_model_if_cache,
     )
     print(
         rag.query(
@@ -116,9 +116,9 @@ def insert(file_path):
     rag = GraphRAG(
         working_dir=WORKING_DIR,
         enable_llm_cache=True,
-        embedding_func=siliconflow_embedding,
-        best_model_func=deepseepk_model_if_cache,
-        cheap_model_func=deepseepk_model_if_cache,
+        embedding_func=openapi_embedding,
+        best_model_func=openapi_model_if_cache,
+        cheap_model_func=openapi_model_if_cache,
     )
     start = time()
     with open(file_path, encoding="utf-8-sig") as f:
