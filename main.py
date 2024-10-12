@@ -1,11 +1,12 @@
+from datetime import datetime
 from dotenv import load_dotenv
+from hashlib import md5
 from loguru import logger
 from nano_graphrag import GraphRAG, QueryParam
 from nano_graphrag._utils import compute_args_hash, wrap_embedding_func_with_attrs
 from nano_graphrag.base import BaseKVStorage
 from openai import AsyncOpenAI, APIConnectionError, RateLimitError
 from shutil import rmtree
-from hashlib import md5
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -22,6 +23,10 @@ import sys
 
 logger.remove()
 logger.add(sys.stdout, level="INFO")
+
+current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+log_filename = f"log_{current_time}.log"
+logger.add(log_filename, level="INFO")
 
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
