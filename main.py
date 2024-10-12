@@ -7,6 +7,8 @@ from nano_graphrag import GraphRAG, QueryParam
 from nano_graphrag.base import BaseKVStorage
 from nano_graphrag._utils import compute_args_hash
 from nano_graphrag._utils import wrap_embedding_func_with_attrs
+from loguru import logger
+import sys
 
 from tenacity import (
     retry,
@@ -16,9 +18,38 @@ from tenacity import (
 )
 
 import argparse
+from shutil import rmtree
 
-logging.basicConfig(level=logging.WARNING)
-logging.getLogger("nano-graphrag").setLevel(logging.INFO)
+# Set the logger to output only INFO level and above
+logger.remove()  # Remove the default logger configuration
+logger.add(sys.stdout, level="INFO")
+# Remove all handlers associated with the root logger object.
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+
+
+# Define a function to redirect standard logging to loguru
+class InterceptHandler(logging.Handler):
+    def emit(self, record):
+        # Get corresponding Loguru level if it exists
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        # Find caller from where originated the log message
+        frame, depth = logging.currentframe(), 2
+        while frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        logger.opt(depth=depth, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
+
+
+# Set up the logging configuration to use the InterceptHandler
+logging.basicConfig(handlers=[InterceptHandler()], level=0)
 
 load_dotenv()
 
@@ -94,6 +125,16 @@ def remove_if_exist(file):
         os.remove(file)
 
 
+def clear_directory(directory):
+    if os.path.exists(directory):
+        for filename in os.listdir(directory):
+            file_path = os.path.join(directory, filename)
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                rmtree(file_path)
+
+
 def query():
     rag = GraphRAG(
         working_dir=WORKING_DIR,
@@ -106,17 +147,13 @@ def query():
         user_input = input("Enter your query (or type 'exit' to quit): ")
         if user_input.lower() == "exit":
             break
-        print(rag.query(user_input, param=QueryParam(mode="global")))
+        logger.info(rag.query(user_input, param=QueryParam(mode="global")))
 
 
 def insert(file_path):
     from time import time
 
-    remove_if_exist(f"{WORKING_DIR}/vdb_entities.json")
-    remove_if_exist(f"{WORKING_DIR}/kv_store_full_docs.json")
-    remove_if_exist(f"{WORKING_DIR}/kv_store_text_chunks.json")
-    remove_if_exist(f"{WORKING_DIR}/kv_store_community_reports.json")
-    remove_if_exist(f"{WORKING_DIR}/graph_chunk_entity_relation.graphml")
+    clear_directory(f"{WORKING_DIR}")
     rag = GraphRAG(
         working_dir=WORKING_DIR,
         enable_llm_cache=True,
@@ -127,7 +164,7 @@ def insert(file_path):
     start = time()
     with open(file_path, encoding="utf-8-sig") as f:
         rag.insert(f.read())
-    print("indexing time:", time() - start)
+    logger.info(f"indexing time: {time() - start}")
 
 
 def main():
@@ -141,9 +178,9 @@ def main():
         "--file",
         type=str,
         help="File path for the insert operation.",
-        default="./book.txt",
     )
     args = parser.parse_args()
+    logging.info(args)
 
     if args.operation == "insert":
         insert(args.file)
