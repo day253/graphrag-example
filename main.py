@@ -1,54 +1,47 @@
-import os
-import logging
-import numpy as np
 from dotenv import load_dotenv
-from openai import AsyncOpenAI, APIConnectionError, RateLimitError
-from nano_graphrag import GraphRAG, QueryParam
-from nano_graphrag.base import BaseKVStorage
-from nano_graphrag._utils import compute_args_hash
-from nano_graphrag._utils import wrap_embedding_func_with_attrs
 from loguru import logger
-import sys
-
+from nano_graphrag import GraphRAG, QueryParam
+from nano_graphrag._utils import compute_args_hash, wrap_embedding_func_with_attrs
+from nano_graphrag.base import BaseKVStorage
+from openai import AsyncOpenAI, APIConnectionError, RateLimitError
+from shutil import rmtree
+from hashlib import md5
 from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
     retry_if_exception_type,
 )
-
+from time import time
 import argparse
-from shutil import rmtree
+import logging
+import numpy as np
+import os
+import sys
 
-# Set the logger to output only INFO level and above
-logger.remove()  # Remove the default logger configuration
+
+logger.remove()
 logger.add(sys.stdout, level="INFO")
-# Remove all handlers associated with the root logger object.
+
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 
 
-# Define a function to redirect standard logging to loguru
 class InterceptHandler(logging.Handler):
     def emit(self, record):
-        # Get corresponding Loguru level if it exists
         try:
             level = logger.level(record.levelname).name
         except ValueError:
             level = record.levelno
-
-        # Find caller from where originated the log message
         frame, depth = logging.currentframe(), 2
         while frame.f_code.co_filename == logging.__file__:
             frame = frame.f_back
             depth += 1
-
         logger.opt(depth=depth, exception=record.exc_info).log(
             level, record.getMessage()
         )
 
 
-# Set up the logging configuration to use the InterceptHandler
 logging.basicConfig(handlers=[InterceptHandler()], level=0)
 
 load_dotenv()
@@ -57,7 +50,6 @@ SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 CHAT_MODEL = "deepseek-chat"
 EMBEDDING_MODEL = "BAAI/bge-m3"
-WORKING_DIR = "./nano_graphrag_cache_deepseek_TEST"
 
 siliconflow_async_client = AsyncOpenAI(
     api_key=SILICONFLOW_API_KEY, base_url="https://api.siliconflow.cn/v1/"
@@ -120,51 +112,44 @@ async def openapi_model_if_cache(
     return response.choices[0].message.content
 
 
-def remove_if_exist(file):
-    if os.path.exists(file):
-        os.remove(file)
-
-
 def clear_directory(directory):
-    if os.path.exists(directory):
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            if os.path.isfile(file_path) or os.path.islink(file_path):
-                os.unlink(file_path)
-            elif os.path.isdir(file_path):
-                rmtree(file_path)
+    if not os.path.exists(directory):
+        return
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        if os.path.isfile(file_path) or os.path.islink(file_path):
+            os.unlink(file_path)
+        elif os.path.isdir(file_path):
+            rmtree(file_path)
 
 
-def query():
-    rag = GraphRAG(
-        working_dir=WORKING_DIR,
-        embedding_func=openapi_embedding,
-        best_model_func=openapi_model_if_cache,
-        cheap_model_func=openapi_model_if_cache,
-    )
-    # "What are the top themes in this story?"
-    while True:
-        user_input = input("Enter your query (or type 'exit' to quit): ")
-        if user_input.lower() == "exit":
-            break
-        logger.info(rag.query(user_input, param=QueryParam(mode="global")))
+class GraphRAGHandler:
+    def __init__(self, document, working_dir=None):
+        self.document = document
 
+        if working_dir is None:
+            self.working_dir = f"cache/{md5(document.encode()).hexdigest()}"
+        else:
+            self.working_dir = working_dir
+        if not os.path.exists(self.working_dir):
+            os.makedirs(self.working_dir)
 
-def insert(file_path):
-    from time import time
+        self.rag = GraphRAG(
+            working_dir=self.working_dir,
+            embedding_func=openapi_embedding,
+            best_model_func=openapi_model_if_cache,
+            cheap_model_func=openapi_model_if_cache,
+        )
 
-    clear_directory(f"{WORKING_DIR}")
-    rag = GraphRAG(
-        working_dir=WORKING_DIR,
-        enable_llm_cache=True,
-        embedding_func=openapi_embedding,
-        best_model_func=openapi_model_if_cache,
-        cheap_model_func=openapi_model_if_cache,
-    )
-    start = time()
-    with open(file_path, encoding="utf-8-sig") as f:
-        rag.insert(f.read())
-    logger.info(f"indexing time: {time() - start}")
+    def query(self, user_input):
+        return self.rag.query(user_input, param=QueryParam(mode="global"))
+
+    def insert(self, file_path):
+        clear_directory(self.working_dir)
+        start = time()
+        with open(file_path, encoding="utf-8-sig") as f:
+            self.rag.insert(f.read())
+        logger.info(f"indexing time: {time() - start}")
 
 
 def main():
@@ -181,11 +166,16 @@ def main():
     )
     args = parser.parse_args()
     logging.info(args)
-
+    handler = GraphRAGHandler(document=args.file)
     if args.operation == "insert":
-        insert(args.file)
+        handler.insert(args.file)
     elif args.operation == "query":
-        query()
+        # "What are the top themes in this story?"
+        while True:
+            user_input = input("Enter your query (or type 'exit' to quit): ")
+            if user_input.lower() == "exit":
+                break
+            logger.info(handler.query(user_input))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,3 @@
 .env
-nano-graphrag
-nano_graphrag_cache_deepseek_TEST/
 *.txt
+cache/
