@@ -144,10 +144,10 @@ class GraphRAGHandler:
     def query(self, user_input):
         return self.rag.query(user_input, param=QueryParam(mode="global"))
 
-    def insert(self, file_path):
+    def insert(self):
         clear_directory(self.working_dir)
         start = time()
-        with open(file_path, encoding="utf-8-sig") as f:
+        with open(self.document, encoding="utf-8-sig") as f:
             self.rag.insert(f.read())
         logger.info(f"indexing time: {time() - start}")
 
@@ -166,9 +166,10 @@ def main():
     )
     args = parser.parse_args()
     logging.info(args)
+
     handler = GraphRAGHandler(document=args.file)
     if args.operation == "insert":
-        handler.insert(args.file)
+        handler.insert()
     elif args.operation == "query":
         # "What are the top themes in this story?"
         while True:
