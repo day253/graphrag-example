@@ -22,8 +22,8 @@ load_dotenv()
 
 SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-CHAT_MODEL = os.getenv("CHAT_MODEL")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
+CHAT_MODEL = "deepseek-chat"
+EMBEDDING_MODEL = "BAAI/bge-m3"
 WORKING_DIR = "./nano_graphrag_cache_deepseek_TEST"
 
 siliconflow_async_client = AsyncOpenAI(
@@ -32,17 +32,18 @@ siliconflow_async_client = AsyncOpenAI(
 deepseek_async_client = AsyncOpenAI(
     api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com/v1/"
 )
-global_openai_async_client = siliconflow_async_client
+global_chat_async_client = deepseek_async_client
+global_embedding_async_client = siliconflow_async_client
 
 
-@wrap_embedding_func_with_attrs(embedding_dim=1536, max_token_size=8192)
+@wrap_embedding_func_with_attrs(embedding_dim=1024, max_token_size=8192)
 @retry(
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=1, min=4, max=10),
     retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
 )
 async def openapi_embedding(texts: list[str]) -> np.ndarray:
-    openai_async_client = global_openai_async_client
+    openai_async_client = global_embedding_async_client
     response = await openai_async_client.embeddings.create(
         model=EMBEDDING_MODEL, input=texts, encoding_format="float"
     )
@@ -52,7 +53,7 @@ async def openapi_embedding(texts: list[str]) -> np.ndarray:
 async def openapi_model_if_cache(
     prompt, system_prompt=None, history_messages=[], **kwargs
 ) -> str:
-    openai_async_client = global_openai_async_client
+    openai_async_client = global_chat_async_client
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
